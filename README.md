@@ -1,3 +1,3 @@
 # 60daysofudacity
 # Updates for #60daysofudacity challengue. 
-Challengue start at 28/06/2019.
+Challengue started at 28/06/2019.
