@@ -100,7 +100,7 @@ def csv_to_matrix(fname, min_count,seq_length=200):
     labels[labels == "ham"] = 0.0
     
     #convert to float
-    #labels = labels.astype('float') 
+    labels = labels.astype('float') 
     #print(labels[:10])
 
 
@@ -201,9 +201,9 @@ def csv_to_matrix(fname, min_count,seq_length=200):
     #print(features[:10,:200])
 
 
-    return features 
+    return word_to_index, index_to_word, features,labels
 
-def split_dataset(features,split_frac = 0.8):
+def split_dataset(features,labels,split_frac = 0.8):
     """
     features: numpy array 
         Shape of (num of examples) x (num of features/sequence length)
