@@ -2,7 +2,16 @@ from preprocess import *
 from rnn_model import SpamRNN
 import torch as th 
 from config import cfg
+
+### TRAINING FAILS IF HOOK PYTORCH
+#import syft as sy 
+#hook = sy.TorchHook(th)
+
 import torch.nn as nn
+import torch.optim as optim 
+
+
+
 
 # Load dictionaries 
 #index_to_word= load_obj("data/index_to_word")
@@ -28,6 +37,8 @@ embedding_dim = 64 #200
 hidden_dim = 32 #128
 n_layers = 2
 
+DEVICE = th.device( 'cuda' if th.cuda.is_available()  else 'cpu')
+
 
 # Make RNN
 net = SpamRNN(vocab_size, output_size, embedding_dim, hidden_dim, n_layers)
@@ -46,6 +57,11 @@ clip=5 # gradient clipping
 
 
 
+# Encryption 
+#num_workers = 3 # Number of workers
+#workers  = [sy.VirtualWorker(hook, id = "w" + str(i)).add_worker(sy.local_worker) for i in range(num_workers) ]
+
+
 
 def train_model(net, epochs = 5, print_every = 100, lr = 0.001, clip = 5) :
     """
@@ -55,11 +71,17 @@ def train_model(net, epochs = 5, print_every = 100, lr = 0.001, clip = 5) :
     """
     # First checking if GPU is available
     train_on_gpu=th.cuda.is_available()
+    print("Train on GPU", train_on_gpu)
+
+    #print("Model device", next(net.parameters()).device)
+
 
     # move model to GPU, if available
     if(train_on_gpu):
-        net = net.cuda()
+        net = net.to(DEVICE)
 
+    #print("Model device", next(net.parameters()).device)
+    
 
         
     # loss and optimization functions
@@ -79,20 +101,15 @@ def train_model(net, epochs = 5, print_every = 100, lr = 0.001, clip = 5) :
         for inputs, labels in train_loader:
             counter += 1
 
-            if(train_on_gpu):
-                inputs, labels = inputs.cuda(), labels.cuda()
-
-
-
-
+            
             # If only one label, convert to int then to tensor of shape ()
             if labels.shape[0] == 1:
                 labels= th.tensor(labels.item())
 
-                if(train_on_gpu):
-                    labels = labels.cuda()
 
-                
+            if(train_on_gpu):
+                inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+
             # initialize hidden state
             # Variable batch size for len of dataset  not divisible by batch_size
             current_batch_size = inputs.shape[0] 
@@ -133,17 +150,18 @@ def train_model(net, epochs = 5, print_every = 100, lr = 0.001, clip = 5) :
                     # we'd backprop through the entire training history
                     val_h = tuple([each.data for each in val_h])
 
-                    if(train_on_gpu):
-                        inputs, labels = inputs.cuda(), labels.cuda()
                     
                     
                     
                     # If only one label, convert to int then to tensor of shape ()
                     if labels.shape[0] == 1:
                         labels= th.tensor(labels.item())
-                        if(train_on_gpu):
-                            labels = labels.cuda()
-                        
+                    
+                    if(train_on_gpu):
+                        inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+                    
+
+
                     output, val_h = net(inputs, val_h)
                     val_loss = criterion(output.squeeze(), labels.float())
 
@@ -160,9 +178,6 @@ def train_model(net, epochs = 5, print_every = 100, lr = 0.001, clip = 5) :
 
 # TESTING 
 
-
-
-
 def test_model(net):
     """
     net: pytoch model
@@ -175,7 +190,11 @@ def test_model(net):
     test_losses = [] # track loss
     num_correct = 0
 
+    # First checking if GPU is available
+    train_on_gpu=th.cuda.is_available()
 
+     # loss 
+    criterion = nn.BCELoss()
 
     net.eval()
     # iterate over test data
@@ -192,7 +211,7 @@ def test_model(net):
         h = tuple([each.data for each in h])
 
         if(train_on_gpu):
-            inputs, labels = inputs.cuda(), labels.cuda()
+            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
         
         # get predicted outputs
         output, h = net(inputs, h)
@@ -227,4 +246,5 @@ def test_model(net):
 
 if __name__ == "__main__":
     train_model(net, epochs =epochs , print_every = print_every, lr = lr, clip = clip)
+    test_model(net)
 

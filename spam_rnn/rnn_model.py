@@ -70,9 +70,11 @@ class SpamRNN(nn.Module):
         train_on_gpu=th.cuda.is_available()
         #print("Train on GPU:", train_on_gpu)
 
+        device = th.device('cuda' if train_on_gpu else  'cpu')
+
         if (train_on_gpu):
-            hidden = (weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().cuda(),
-                  weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().cuda())
+            hidden = (weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(device),
+                  weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(device))
         else:
             hidden = (weight.new(self.n_layers, batch_size, self.hidden_dim).zero_(),
                       weight.new(self.n_layers, batch_size, self.hidden_dim).zero_())
