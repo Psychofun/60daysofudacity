@@ -1,16 +1,16 @@
 from preprocess import *
 from rnn_model import SpamRNN
-import torch as th 
+ 
 from config import cfg
-
-### TRAINING FAILS IF HOOK PYTORCH
-#import syft as sy 
-#hook = sy.TorchHook(th)
-
+import torch as th
+# To use syft with cuda.
+th.set_default_tensor_type(th.cuda.FloatTensor) 
+import syft as sy 
+hook = sy.TorchHook(th)
 import torch.nn as nn
 import torch.optim as optim 
 
-
+from torch.utils.data import TensorDataset, DataLoader
 
 
 # Load dictionaries 
@@ -21,14 +21,14 @@ FNAME = "../data/spam.csv" #training set file
 MIN_COUNT = 5
 SEQ_LENGTH = 200
 SPLIT_FRAC = 0.8
+BATCH_SIZE = 32
 
 
 # Get matrix of features.
 word_to_index, index_to_word, matrix,labels = csv_to_matrix(fname=FNAME, min_count = MIN_COUNT,seq_length= SEQ_LENGTH)
 
 # Get loaders.
-train_loader, valid_loader, test_loader = split_dataset(matrix,labels, split_frac = SPLIT_FRAC)
-
+train_loader, valid_loader, test_loader, tensor_train, tensor_validation, tensor_test = split_dataset(matrix,labels, split_frac = SPLIT_FRAC, batch_size = BATCH_SIZE)
 # MODEL PARAMETERS
 # Instantiate the model w/ hyperparams
 vocab_size = len(index_to_word) 
@@ -40,13 +40,17 @@ n_layers = 2
 DEVICE = th.device( 'cuda' if th.cuda.is_available()  else 'cpu')
 
 
+# First checking if GPU is available
+train_on_gpu=th.cuda.is_available()
+print("Train on GPU", train_on_gpu)
+
 # Make RNN
-net = SpamRNN(vocab_size, output_size, embedding_dim, hidden_dim, n_layers)
+net = SpamRNN(vocab_size, output_size, embedding_dim, hidden_dim, n_layers, train_on_gpu)
 
 print("Network architecture: \n",net)
 
 # TRAINING PARAMS 
-epochs =8 # 3-4 is approx where I noticed the validation loss stop decreasing
+epochs =1 # 3-4 is approx where I noticed the validation loss stop decreasing
 
 print_every = 100
 clip=5 # gradient clipping
@@ -58,20 +62,18 @@ clip=5 # gradient clipping
 
 
 # Encryption 
-#num_workers = 3 # Number of workers
-#workers  = [sy.VirtualWorker(hook, id = "w" + str(i)).add_worker(sy.local_worker) for i in range(num_workers) ]
+num_workers = 3 # Number of workers
+workers  = [sy.VirtualWorker(hook, id = "w" + str(i)).add_worker(sy.local_worker) for i in range(num_workers) ]
 
 
-
-def train_model(net, epochs = 5, print_every = 100, lr = 0.001, clip = 5) :
+# If using syft 
+def train_model(net, epochs = 5, print_every = 100, lr = 0.001, clip = 5, train_on_gpu = True) :
     """
     net: pytoch model
         RNN
 
     """
-    # First checking if GPU is available
-    train_on_gpu=th.cuda.is_available()
-    print("Train on GPU", train_on_gpu)
+    
 
     #print("Model device", next(net.parameters()).device)
 
@@ -80,7 +82,7 @@ def train_model(net, epochs = 5, print_every = 100, lr = 0.001, clip = 5) :
     if(train_on_gpu):
         net = net.to(DEVICE)
 
-    #print("Model device", next(net.parameters()).device)
+    print("Model device", next(net.parameters()).device)
     
 
         
@@ -178,10 +180,11 @@ def train_model(net, epochs = 5, print_every = 100, lr = 0.001, clip = 5) :
 
 # TESTING 
 
-def test_model(net):
+def test_model(net,test_loader):
     """
     net: pytoch model
         RNN
+    test_loader:pytorch  Data Loader
 
     """
 
@@ -241,10 +244,70 @@ def test_model(net):
 
     return mean_loss,  test_acc
 
+def encrypt_data(data, workers ):
+    """
+    data: torch tensor
+    workers: list
+        List of virtual workers
+    """
 
+    print("Data device ",data.device )
+    encrypted_data = data.fix_precision().share(*workers)
+
+    print("Encrypted data device",encrypted_data.device )
+    
+    return encrypted_data
+
+
+def encrypt_model(model, workers):
+    """
+    model: pytorch model
+    data: torch tensor
+    workers: list 
+        List of virtual workers
+    """
+    encrypted_model = model.fix_precision().share(*workers)
+
+    #print("Encrypted Parameters:", list(encrypted_model.parameters()))
+
+
+
+    return encrypted_model
+
+    
 
 
 if __name__ == "__main__":
     train_model(net, epochs =epochs , print_every = print_every, lr = lr, clip = clip)
-    test_model(net)
+    
 
+    encrypted_net = encrypt_model(net, workers)
+
+    #Move to device
+    
+    tensor_test = (tensor_test[0].to(DEVICE),tensor_test[1].to(DEVICE))
+   
+    ### Tes with encryption 
+    encrypted_data_x = encrypt_data(tensor_test[0], workers)
+    encrypted_data_y = encrypt_data(tensor_test[1], workers )
+    print("Encrypted data x", encrypted_data_x.shape)
+    print("Encrypted data y", encrypted_data_y.shape)
+
+    
+
+    
+    print("Encrypted x device:", encrypted_data_x.device)
+    print("BATCH_SIZE", BATCH_SIZE)
+    tensor_test_set = TensorDataset(encrypted_data_x, encrypted_data_y)
+
+    print("Type tensor_test_set",type(tensor_test_set))
+    
+    test_loader = DataLoader( 
+        tensor_test_set,
+        shuffle = True,
+        batch_size= 32)
+
+            
+
+    # Test with encryption.
+    test_model(encrypted_net,test_loader)

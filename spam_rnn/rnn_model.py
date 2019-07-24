@@ -1,13 +1,16 @@
 
-import torch.nn as nn
+
 import torch as th
+# To use syft with cuda.
+th.set_default_tensor_type(th.cuda.FloatTensor)
+import torch.nn as nn
 
 class SpamRNN(nn.Module):
     """
     The RNN model that will be used to perform Spam Detection.
     """
 
-    def __init__(self, vocab_size, output_size, embedding_dim, hidden_dim, n_layers, drop_prob=0.5):
+    def __init__(self, vocab_size, output_size, embedding_dim, hidden_dim, n_layers,train_on_gpu, drop_prob=0.5):
         """
         Initialize the model by setting up the layers.
         """
@@ -16,6 +19,7 @@ class SpamRNN(nn.Module):
         self.output_size = output_size
         self.n_layers = n_layers
         self.hidden_dim = hidden_dim
+        self.train_on_gpu = train_on_gpu
         
         # embedding and LSTM layers
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
@@ -66,13 +70,17 @@ class SpamRNN(nn.Module):
         weight = next(self.parameters()).data
         
 
-        # First checking if GPU is available
-        train_on_gpu=th.cuda.is_available()
-        #print("Train on GPU:", train_on_gpu)
+        if self.train_on_gpu:
+            device_str = 'cuda' if self.train_on_gpu else  'cpu'
+            device = th.device(device_str)
+            if device_str == 'cpu':
+                self.train_on_gpu = False
+                print("Cannot train on GPU.")
+            
+            
 
-        device = th.device('cuda' if train_on_gpu else  'cpu')
 
-        if (train_on_gpu):
+        if (self.train_on_gpu):
             hidden = (weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(device),
                   weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(device))
         else:

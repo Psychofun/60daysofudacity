@@ -1,8 +1,10 @@
 import numpy as np
 from numpy import  genfromtxt
-import os 
+import os
 import pickle
 import torch as th
+# To use syft with cuda.
+th.set_default_tensor_type(th.cuda.FloatTensor)
 from collections import Counter
 from torch.utils.data import TensorDataset, DataLoader
 UNK_TOKEN = 'UNK'
@@ -10,10 +12,10 @@ UNK_TOKEN = 'UNK'
 
 def save_obj(obj,path ):
     direct, fname = os.path.split(path)
-    
+
     if not os.path.exists(direct):
         os.makedirs(direct)
-    
+
     with open(path + '.pkl', 'wb') as f:
         pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
 
@@ -27,16 +29,16 @@ def get_word(index_to_word, index):
     index_to_word: dictionary
         index to word dict
     index: int
-    
+
     return word given index. If index (key) not in dict returns 'UNK' unknow token
     """
-    
+
     result = index_to_word.get(index,None)
-    
+
     if result:
         return result
     return UNK_TOKEN
-    
+
 
 def get_index(word_to_index, word):
     """
@@ -45,29 +47,29 @@ def get_index(word_to_index, word):
     word: string
     return index of the word from word_to_index
     if word not in word_to_index return 0, index of unknow token.
-    
+
     """
-    
+
     result = word_to_index.get(word,None)
-    
-    if result: 
+
+    if result:
         return result
     return 0
 
 
 
 def pad_features(vectors, seq_length):
-    ''' Return features of vectors, where each review is padded with 0's 
+    ''' Return features of vectors, where each review is padded with 0's
         or truncated to the input seq_length.
     '''
-    
+
     # getting the correct rows x cols shape
     features = np.zeros((len(vectors), seq_length), dtype=int)
 
-    # for each review, I grab that review and 
+    # for each review, I grab that review and
     for i, row in enumerate(vectors):
         features[i, -len(row):] = np.array(row)[:seq_length]
-    
+
     return features
 
 
@@ -75,8 +77,8 @@ def csv_to_matrix(fname, min_count,seq_length=200):
     """
     fname: string
         path to csv file.
-    min_count: int 
-        minumum count 
+    min_count: int
+        minumum count
 
     Convert csv to matrix of word embeddings
     """
@@ -87,9 +89,9 @@ def csv_to_matrix(fname, min_count,seq_length=200):
     data = data[1:]
 
     # Separate into messages and labels
-    labels,messages =zip(*list(map( 
+    labels,messages =zip(*list(map(
             lambda x: (x[:3]  , x[4:-3]) if x.startswith('h') else (x[:4],x[5:-3])
-                               
+
                       ,data)))
 
     labels = np.array(labels)
@@ -98,9 +100,9 @@ def csv_to_matrix(fname, min_count,seq_length=200):
     # Labels to ints
     labels[labels == "spam"] = 1.0
     labels[labels == "ham"] = 0.0
-    
+
     #convert to float
-    labels = labels.astype('float') 
+    labels = labels.astype('float')
     #print(labels[:10])
 
 
@@ -120,13 +122,13 @@ def csv_to_matrix(fname, min_count,seq_length=200):
     word_count ={}
     for word in words:
         r = word_count.get(word,None)
-    
+
         if r :
             word_count[word]+=1
         else:
             word_count[word] = 1
-        
-        
+
+
 
     #word to index
     word_to_index = {}
@@ -139,11 +141,11 @@ def csv_to_matrix(fname, min_count,seq_length=200):
         if word_count[key] >= min_count:
             word_to_index[key] = i
             i+= 1
-    
+
     ### Add Unknow token
-    word_to_index[UNK_TOKEN] = 0 
-        
-        
+    word_to_index[UNK_TOKEN] = 0
+
+
     ###print(len(word_to_index.keys() ))
     ###word_to_index
 
@@ -152,7 +154,7 @@ def csv_to_matrix(fname, min_count,seq_length=200):
 
     for key in word_to_index.keys():
         index_to_word[ word_to_index[key] ] =key
-    
+
 
     # Save Dictionaries to file.
     save_obj(index_to_word, "data/index_to_word")
@@ -163,7 +165,7 @@ def csv_to_matrix(fname, min_count,seq_length=200):
     vectors = []
 
     for message in messages:
-        
+
         vector = [ get_index(word_to_index,w) for w in message.split()]
         vectors.extend([vector])
 
@@ -178,7 +180,7 @@ def csv_to_matrix(fname, min_count,seq_length=200):
 
     non_zero_idx = [i for i,message in enumerate(vectors) if len(message)!= 0 ]
 
-    #remove 0 length messages end their labels 
+    #remove 0 length messages end their labels
     vectors = [vectors[i] for i in non_zero_idx ]
     labels = np.array([labels[i] for i in non_zero_idx])
 
@@ -197,20 +199,22 @@ def csv_to_matrix(fname, min_count,seq_length=200):
 
 
 
-    # print first 200 values of the first 10 batches 
+    # print first 200 values of the first 10 batches
     #print(features[:10,:200])
 
 
     return word_to_index, index_to_word, features,labels
 
-def split_dataset(features,labels,split_frac = 0.8):
+def split_dataset(features,labels,split_frac = 0.8,batch_size = 32):
     """
-    features: numpy array 
+    features: numpy array
         Shape of (num of examples) x (num of features/sequence length)
     split_frac: float
         percentage for training set, remainig goes to validation 50% and test set 50%.
 
-    return data loaders for train, validation and test.
+    return data loaders and  raw tensors for train, validation and test
+    train_loader, valid_loader, test_loader, tensor_train, tensor_validation, tensor_test
+    where tensor_* is a tuple (X (features), y (labels))
     """
 
 
@@ -226,23 +230,27 @@ def split_dataset(features,labels,split_frac = 0.8):
 
     ## print out the shapes of your resultant feature data
     print("\t\t\tFeature Shapes:")
-    print("Train set: \t\t{}".format(train_x.shape), 
+    print("Train set: \t\t{}".format(train_x.shape),
         "\nValidation set: \t{}".format(val_x.shape),
         "\nTest set: \t\t{}".format(test_x.shape))
 
-    # Create Tensor datasets
-    # CONVERT TO int64 for embedding layer.
-    train_data = TensorDataset(th.from_numpy(train_x).to(th.int64), th.from_numpy(train_y))
-    valid_data = TensorDataset(th.from_numpy(val_x).to(th.int64)  , th.from_numpy(val_y))
-    test_data = TensorDataset(th.from_numpy(test_x).to(th.int64)  , th.from_numpy(test_y))
 
-    batch_size = 32
+    # CONVERT TO int64 for embedding layer.
+    tensor_train = (th.from_numpy(train_x).to(th.int64),   th.from_numpy(train_y))
+    tensor_validation = (th.from_numpy(val_x).to(th.int64),th.from_numpy(val_y) )
+    tensor_test = (th.from_numpy(test_x).to(th.int64),     th.from_numpy(test_y) )
+
+
+    # Create Tensor datasets
+    train_data = TensorDataset( tensor_train[0],tensor_train[1] )
+    valid_data = TensorDataset(tensor_validation[0], tensor_validation[1] )
+    test_data = TensorDataset(tensor_test[0], tensor_test[1])
+
+
 
     # make sure the SHUFFLE your training data
     train_loader = DataLoader(train_data, shuffle=True, batch_size=batch_size)
     valid_loader = DataLoader(valid_data, shuffle=True, batch_size=batch_size)
     test_loader = DataLoader(test_data, shuffle=True, batch_size=batch_size)
 
-    return train_loader, valid_loader, test_loader
-
-
+    return train_loader, valid_loader, test_loader, tensor_train, tensor_validation, tensor_test
