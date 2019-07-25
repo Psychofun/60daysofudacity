@@ -3,6 +3,8 @@
 import torch as th
 # To use syft with cuda.
 th.set_default_tensor_type(th.cuda.FloatTensor)
+import syft as sy 
+hook = sy.TorchHook(th)
 import torch.nn as nn
 
 class SpamRNN(nn.Module):
@@ -10,7 +12,7 @@ class SpamRNN(nn.Module):
     The RNN model that will be used to perform Spam Detection.
     """
 
-    def __init__(self, vocab_size, output_size, embedding_dim, hidden_dim, n_layers,train_on_gpu, drop_prob=0.5):
+    def __init__(self, vocab_size, output_size, embedding_dim, hidden_dim, n_layers,train_on_gpu,workers,  drop_prob=0.5):
         """
         Initialize the model by setting up the layers.
         """
@@ -20,6 +22,8 @@ class SpamRNN(nn.Module):
         self.n_layers = n_layers
         self.hidden_dim = hidden_dim
         self.train_on_gpu = train_on_gpu
+        self.crypto_testing = True
+        self.workers = workers
         
         # embedding and LSTM layers
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
@@ -42,27 +46,40 @@ class SpamRNN(nn.Module):
         """
         batch_size = x.size(0)
 
+       
         # embeddings and lstm_out
+       
         embeds = self.embedding(x)
+       
+        if self.crypto_testing:
+            embeds =tuple( e.share(*self.workers) for e in embeds )
+
         lstm_out, hidden = self.lstm(embeds, hidden)
-    
+
+       
         # stack up lstm outputs
         lstm_out = lstm_out.contiguous().view(-1, self.hidden_dim)
+
         
         # dropout and fully-connected layer
         out = self.dropout(lstm_out)
+
+       
         out = self.fc(out)
+
         # sigmoid function
+
         sig_out = self.sig(out)
         
         # reshape to be batch_size first
         sig_out = sig_out.view(batch_size, -1)
         sig_out = sig_out[:, -1] # get last batch of labels
         
+        
         # return last sigmoid output and hidden state
         return sig_out, hidden
-    
-    
+
+        
     def init_hidden(self, batch_size):
         ''' Initializes hidden state '''
         # Create two new tensors with sizes n_layers x batch_size x hidden_dim,
@@ -88,4 +105,33 @@ class SpamRNN(nn.Module):
                       weight.new(self.n_layers, batch_size, self.hidden_dim).zero_())
         
         return hidden
+    
+    
+    def init_hidden_encrypted(self, batch_size, workers):
+        ''' Initializes hidden state '''
+        # Create two new tensors with sizes n_layers x batch_size x hidden_dim,
+        # initialized to zero, for hidden state and cell state of LSTM
+        weight = next(self.parameters()).clone().get().data
+        
+
+        if self.train_on_gpu:
+            device_str = 'cuda' if self.train_on_gpu else  'cpu'
+            device = th.device(device_str)
+            if device_str == 'cpu':
+                self.train_on_gpu = False
+                print("Cannot train on GPU.")
+            
+            
+
+        hidden = (weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(device),
+                  weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(device))
+        
+        hidden = (
+                  hidden[0].share(*workers),
+                  hidden[1].share(*workers))
+       
+        return hidden
+    
+
+    
         

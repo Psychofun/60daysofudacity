@@ -44,10 +44,6 @@ DEVICE = th.device( 'cuda' if th.cuda.is_available()  else 'cpu')
 train_on_gpu=th.cuda.is_available()
 print("Train on GPU", train_on_gpu)
 
-# Make RNN
-net = SpamRNN(vocab_size, output_size, embedding_dim, hidden_dim, n_layers, train_on_gpu)
-
-print("Network architecture: \n",net)
 
 # TRAINING PARAMS 
 epochs =1 # 3-4 is approx where I noticed the validation loss stop decreasing
@@ -65,8 +61,12 @@ clip=5 # gradient clipping
 num_workers = 3 # Number of workers
 workers  = [sy.VirtualWorker(hook, id = "w" + str(i)).add_worker(sy.local_worker) for i in range(num_workers) ]
 
+# Make RNN
+net = SpamRNN(vocab_size, output_size, embedding_dim, hidden_dim, n_layers, train_on_gpu, workers = workers)
 
-# If using syft 
+print("Network architecture: \n",net)
+
+
 def train_model(net, epochs = 5, print_every = 100, lr = 0.001, clip = 5, train_on_gpu = True) :
     """
     net: pytoch model
@@ -76,7 +76,7 @@ def train_model(net, epochs = 5, print_every = 100, lr = 0.001, clip = 5, train_
     
 
     #print("Model device", next(net.parameters()).device)
-
+    net.crypto_testing = False
 
     # move model to GPU, if available
     if(train_on_gpu):
@@ -180,7 +180,7 @@ def train_model(net, epochs = 5, print_every = 100, lr = 0.001, clip = 5, train_
 
 # TESTING 
 
-def test_model(net,test_loader):
+def test_model(net,test_loader, train_on_gpu):
     """
     net: pytoch model
         RNN
@@ -208,6 +208,9 @@ def test_model(net,test_loader):
         # Variable batch size for len of dataset  not divisible by batch_size
         current_batch_size = inputs.shape[0] 
         h = net.init_hidden(current_batch_size)
+
+        print("H type", type(h[0]))
+
 
         # Creating new variables for the hidden state, otherwise
         # we'd backprop through the entire training history
@@ -244,6 +247,73 @@ def test_model(net,test_loader):
 
     return mean_loss,  test_acc
 
+
+# TESTING 
+
+def test_model_encrypted(net,test_loader, train_on_gpu, workers):
+    """
+    net: pytoch model
+        RNN
+    test_loader:pytorch  Data Loader
+
+    """
+
+    #for param in iter(net.embedding.parameters()):
+    #    param = param.share(*workers)
+    net.crypto_testing = True
+   
+    # Get test data loss and accuracy
+    test_losses = [] # track loss
+    num_correct = 0
+ 
+     # loss 
+    criterion = nn.BCELoss()
+
+    net.eval()
+    # iterate over test data
+    for inputs, labels in test_loader:
+        # initialize hidden state
+        # Variable batch size for len of dataset  not divisible by batch_size
+        current_batch_size = inputs.shape[0] 
+        h = net.init_hidden_encrypted(current_batch_size,workers)
+
+        # Creating new variables for the hidden state, otherwise
+        # we'd backprop through the entire training history
+        h = tuple([each.clone().get().data.share(*workers) for each in h ])
+       
+
+        if(train_on_gpu):
+            inputs, labels = encrypt_data(inputs.to(DEVICE), workers),encrypt_data(labels.to(DEVICE), workers)
+        
+        
+        # get predicted outputs
+        output, h = net(inputs, h)
+                
+        # calculate loss
+        test_loss = criterion(output.squeeze(), labels.float())
+        test_losses.append(test_loss.item())
+        
+        # convert output probabilities to predicted class (0 or 1)
+        pred = th.round(output.squeeze())  # rounds to the nearest integer
+        
+        # compare predictions to true label
+        correct_tensor = pred.eq(labels.float().view_as(pred))
+        correct = np.squeeze(correct_tensor.numpy()) if not train_on_gpu else np.squeeze(correct_tensor.cpu().numpy())
+        num_correct += np.sum(correct)
+
+
+    # -- stats! -- ##
+    # avg test loss
+    mean_loss = np.mean(test_losses)
+    print("Test loss: {:.3f}".format(mean_loss))
+
+    # accuracy over all test data
+    test_acc = num_correct/len(test_loader.dataset)
+    print("Test accuracy: {:.3f}".format(test_acc))
+
+
+    return mean_loss,  test_acc
+
 def encrypt_data(data, workers ):
     """
     data: torch tensor
@@ -251,10 +321,10 @@ def encrypt_data(data, workers ):
         List of virtual workers
     """
 
-    print("Data device ",data.device )
-    encrypted_data = data.fix_precision().share(*workers)
+   
+    encrypted_data = data.share(*workers)
 
-    print("Encrypted data device",encrypted_data.device )
+   
     
     return encrypted_data
 
@@ -266,11 +336,8 @@ def encrypt_model(model, workers):
     workers: list 
         List of virtual workers
     """
-    encrypted_model = model.fix_precision().share(*workers)
 
-    #print("Encrypted Parameters:", list(encrypted_model.parameters()))
-
-
+    encrypted_model = model.share(*workers)
 
     return encrypted_model
 
@@ -278,36 +345,13 @@ def encrypt_model(model, workers):
 
 
 if __name__ == "__main__":
+    print("Version of syft", sy.__version__)
     train_model(net, epochs =epochs , print_every = print_every, lr = lr, clip = clip)
     
 
     encrypted_net = encrypt_model(net, workers)
 
-    #Move to device
-    
-    tensor_test = (tensor_test[0].to(DEVICE),tensor_test[1].to(DEVICE))
-   
-    ### Tes with encryption 
-    encrypted_data_x = encrypt_data(tensor_test[0], workers)
-    encrypted_data_y = encrypt_data(tensor_test[1], workers )
-    print("Encrypted data x", encrypted_data_x.shape)
-    print("Encrypted data y", encrypted_data_y.shape)
-
-    
-
-    
-    print("Encrypted x device:", encrypted_data_x.device)
-    print("BATCH_SIZE", BATCH_SIZE)
-    tensor_test_set = TensorDataset(encrypted_data_x, encrypted_data_y)
-
-    print("Type tensor_test_set",type(tensor_test_set))
-    
-    test_loader = DataLoader( 
-        tensor_test_set,
-        shuffle = True,
-        batch_size= 32)
-
-            
-
     # Test with encryption.
-    test_model(encrypted_net,test_loader)
+    test_model_encrypted(encrypted_net,test_loader, train_on_gpu = True, workers = workers)
+   
+

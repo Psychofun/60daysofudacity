@@ -242,9 +242,9 @@ def split_dataset(features,labels,split_frac = 0.8,batch_size = 32):
 
 
     # Create Tensor datasets
-    train_data = TensorDataset( tensor_train[0],tensor_train[1] )
-    valid_data = TensorDataset(tensor_validation[0], tensor_validation[1] )
-    test_data = TensorDataset(tensor_test[0], tensor_test[1])
+    train_data = TensorDataset( tensor_train[0].clone(),tensor_train[1].clone() )
+    valid_data = TensorDataset(tensor_validation[0].clone(), tensor_validation[1].clone() )
+    test_data = TensorDataset(tensor_test[0].clone(), tensor_test[1].clone())
 
 
 
