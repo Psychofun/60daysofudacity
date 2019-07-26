@@ -45,15 +45,12 @@ class SpamRNN(nn.Module):
         Perform a forward pass of our model on some input and hidden state.
         """
         batch_size = x.size(0)
+        #print("EMBEDDING PARAMETERS",list(self.embedding.parameters() ))
+        #print("EMBEDDING PARAMETERS",self.embedding.weight.clone().get() )
 
-       
+        
         # embeddings and lstm_out
-       
         embeds = self.embedding(x)
-       
-        if self.crypto_testing:
-            embeds =tuple( e.share(*self.workers) for e in embeds )
-
         lstm_out, hidden = self.lstm(embeds, hidden)
 
        
@@ -111,7 +108,12 @@ class SpamRNN(nn.Module):
         ''' Initializes hidden state '''
         # Create two new tensors with sizes n_layers x batch_size x hidden_dim,
         # initialized to zero, for hidden state and cell state of LSTM
-        weight = next(self.parameters()).clone().get().data
+
+        #print("Slef parameters", next(self.parameters() ))
+        weight = next(self.parameters()).data
+        print("WEIGHT", weight.device)
+        #weight = weight.cpu()
+        #print("WEIGHT", weight.device)
         
 
         if self.train_on_gpu:
@@ -123,12 +125,10 @@ class SpamRNN(nn.Module):
             
             
 
-        hidden = (weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(device),
-                  weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().to(device))
+        hidden = (weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().fix_precision().share(*workers),
+                  weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().fix_precision().share(*workers))
         
-        hidden = (
-                  hidden[0].share(*workers),
-                  hidden[1].share(*workers))
+    
        
         return hidden
     

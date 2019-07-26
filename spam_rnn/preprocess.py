@@ -8,6 +8,7 @@ th.set_default_tensor_type(th.cuda.FloatTensor)
 from collections import Counter
 from torch.utils.data import TensorDataset, DataLoader
 UNK_TOKEN = 'UNK'
+from string import punctuation
 
 
 def save_obj(obj,path ):
@@ -254,3 +255,23 @@ def split_dataset(features,labels,split_frac = 0.8,batch_size = 32):
     test_loader = DataLoader(test_data, shuffle=True, batch_size=batch_size)
 
     return train_loader, valid_loader, test_loader, tensor_train, tensor_validation, tensor_test
+
+
+
+
+def tokenize_message(message, word_to_index):
+    message = message.lower() # lowercase
+    # get rid of punctuation
+    test_text = ''.join([c for c in message if c not in punctuation])
+
+    # splitting by spaces
+    test_words = test_text.split()
+
+    # tokens
+    test_ints = []
+    test_ints.append([get_index(word_to_index,word) for word in test_words])
+
+    return test_ints
+
+
+

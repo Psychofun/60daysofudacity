@@ -1,4 +1,4 @@
-from preprocess import *
+from preprocess import tokenize_message,pad_features,csv_to_matrix,split_dataset
 from rnn_model import SpamRNN
  
 from config import cfg
@@ -9,8 +9,10 @@ import syft as sy
 hook = sy.TorchHook(th)
 import torch.nn as nn
 import torch.optim as optim 
-
 from torch.utils.data import TensorDataset, DataLoader
+
+import numpy as np
+import os 
 
 
 # Load dictionaries 
@@ -209,7 +211,7 @@ def test_model(net,test_loader, train_on_gpu):
         current_batch_size = inputs.shape[0] 
         h = net.init_hidden(current_batch_size)
 
-        print("H type", type(h[0]))
+       
 
 
         # Creating new variables for the hidden state, otherwise
@@ -339,19 +341,43 @@ def encrypt_model(model, workers):
 
     encrypted_model = model.share(*workers)
 
+    print("Encrypted model parameters", list(encrypted_model.parameters()))
+
     return encrypted_model
 
+
+def encrypt_prediction(text):
+    """
+    text: string 
+        message to classify
+    return 1 for spam 0 for no spam
+    """
     
+
+
+
 
 
 if __name__ == "__main__":
     print("Version of syft", sy.__version__)
+    
     train_model(net, epochs =epochs , print_every = print_every, lr = lr, clip = clip)
+
+    
+    # Test Net 
+    test_model(net,test_loader, train_on_gpu = True)
     
 
-    encrypted_net = encrypt_model(net, workers)
-
     # Test with encryption.
-    test_model_encrypted(encrypted_net,test_loader, train_on_gpu = True, workers = workers)
+    #test_model_encrypted(encrypted_net,test_loader, train_on_gpu = True, workers = workers)
+    #encrypted_net = encrypt_model(net, workers)
    
+    # Save model
 
+    model_path = "./models/"
+    if not os.path.exists(model_path):
+        os.makedirs(model_path)
+
+    file_path = model_path + "rnn"
+        
+    th.save(net.state_dict(),file_path)
