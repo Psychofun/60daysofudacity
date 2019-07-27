@@ -48,7 +48,7 @@ print("Train on GPU", train_on_gpu)
 
 
 # TRAINING PARAMS 
-epochs =1 # 3-4 is approx where I noticed the validation loss stop decreasing
+epochs =4 # 3-4 is approx where I noticed the validation loss stop decreasing
 
 print_every = 100
 clip=5 # gradient clipping
@@ -341,18 +341,10 @@ def encrypt_model(model, workers):
 
     encrypted_model = model.share(*workers)
 
-    print("Encrypted model parameters", list(encrypted_model.parameters()))
 
     return encrypted_model
 
 
-def encrypt_prediction(text):
-    """
-    text: string 
-        message to classify
-    return 1 for spam 0 for no spam
-    """
-    
 
 
 

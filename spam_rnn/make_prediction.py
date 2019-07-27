@@ -22,7 +22,8 @@ def predict(net, message,use_gpu, sequence_length=200):
     sequence_length: int
         Length of sequences
     """
-    
+    if len(message) == 0:
+        return None 
     net.eval()
     
     # tokenize review
@@ -66,6 +67,55 @@ def predict(net, message,use_gpu, sequence_length=200):
         
     return pred.item()
 
+
+
+def to_device(obj, device = 'cpu', is_model = True):
+    """
+    obj: pytorch model or data
+    device: string 
+        device to send model or data
+    is_model: Boolean 
+        Indicates if model is passed
+    return data or model
+    """
+
+    if device.startswith('cuda'):
+        assert th.cuda.is_available(), 'GPU computation is not available'
+
+        if is_model:
+            if str(next(obj.parameters()).device).startswith(device):
+                return obj
+        
+        else:
+
+            if str(obj.device).startswith(device):
+                return obj
+
+        obj = obj.to(  th.device(device)    )
+        return obj
+
+    
+
+    if is_model:
+        if str(next(obj.parameters()).device).startswith(device):
+                return obj
+        
+        else:
+
+            if str(obj.device).startswith(device):
+                return obj
+
+    obj = obj.to(  th.device(device)    )
+
+    return obj
+    
+
+    
+    
+
+        
+
+
 def predict_encrypted(net, message,workers,use_gpu = True, sequence_length=200):
     """
     net: pytorch RNN model. Whiout encryption
@@ -85,6 +135,10 @@ def predict_encrypted(net, message,workers,use_gpu = True, sequence_length=200):
 
     
     """
+
+    if len(message) == 0:
+        return None 
+    
     
     net.eval()
     
@@ -97,6 +151,7 @@ def predict_encrypted(net, message,workers,use_gpu = True, sequence_length=200):
     
     # convert to tensor to pass into your model
     feature_tensor = th.from_numpy(features)
+
     # cast tensor to int64
     feature_tensor = feature_tensor.to(th.int64)
     
@@ -104,30 +159,25 @@ def predict_encrypted(net, message,workers,use_gpu = True, sequence_length=200):
     
     
     if(use_gpu == True):
-        if th.cuda.is_available():
-            gpu_device = th.device('cuda')
-            feature_tensor = feature_tensor.to(gpu_device)
-            #net = net.to(gpu_device)
-        else: 
-            print("Cannot use GPU :(")
+        feature_tensor = to_device(feature_tensor, 'cuda', is_model = False)
+        net = to_device(net,'cuda', is_model = True)
+    else: # As default is cuda.FloatTensor, move to cpu
+        feature_tensor = to_device(feature_tensor, 'cuda', is_model = False)
+        net = to_device(net,'cuda', is_model = True)
 
-    #THIS TIME. Move to CPU
-    cpu_device = th.device('cpu')
-    feature_tensor = feature_tensor.to(cpu_device)
-    print("Feature tensor device", feature_tensor.device)
-    #net = net.to(cpu_device)
+
 
     # Share with workers
     
     # initialize hidden state
-    encrypted_h = net.init_hidden_encrypted(batch_size, workers)
+    encrypted_h = net.init_hidden_encrypted(batch_size, workers, use_gpu = use_gpu)
     encrypted_feature_tensor = feature_tensor.fix_precision().share(*workers)
     encrypted_net = net.fix_precision().share(*workers)
 
     print("encrypted_feature_tensor, encrypted_h ", encrypted_feature_tensor, encrypted_h)
 
     # get the output from the model
-    encrypted_output, h = encrypted_net(encrypted_feature_tensor, encrypted_h)
+    encrypted_output, encrypted_h = encrypted_net(encrypted_feature_tensor, encrypted_h)
     
     # convert output probabilities to predicted class (0 or 1)
     encrypted_pred = th.round(encrypted_output.squeeze()) 
@@ -135,6 +185,7 @@ def predict_encrypted(net, message,workers,use_gpu = True, sequence_length=200):
     pred = encrypted_pred.get().float_precision()
 
     output = encrypted_output.get().float_precision()
+
     # printing output value, before rounding
     print('Prediction value, pre-rounding: {:.6f}'.format(output.item()))
     
@@ -153,10 +204,12 @@ def predict_encrypted(net, message,workers,use_gpu = True, sequence_length=200):
 if __name__ == "__main__":
 
     from rnn_model import SpamRNN
+    
     # To use syft with cuda.
-    th.set_default_tensor_type(th.FloatTensor)
+    th.set_default_tensor_type(th.cuda.FloatTensor)
     import syft as sy 
-    hook = sy.TorchHook(th)    
+    hook = sy.TorchHook(th)   
+
     # Encryption 
     num_workers = 3 # Number of workers
     workers  = [sy.VirtualWorker(hook, id = "w" + str(i)).add_worker(sy.local_worker) for i in range(num_workers) ]
@@ -177,8 +230,11 @@ if __name__ == "__main__":
     model.load_state_dict(th.load(file_path))
     model.eval()
 
-    message = "New offers come to nigth. 30% or until 90% off"
+    message = "Purchase now! Limited offer. Click here. Best deal, never returns alert"
 
-    c = predict_encrypted(net = model , message = message , workers = workers , use_gpu = False,sequence_length = 200  )
+    #c = predict(net = model , message = message , use_gpu =True , sequence_length = 200)
+    #print("Class predicted", c)
+
+    c_encrypted = predict_encrypted(net = model , message = message , workers = workers , use_gpu = True, sequence_length = 200  )
 
     print("Spam or Not?: {}".format( "Yes" if c == 1.0 else "No" ))

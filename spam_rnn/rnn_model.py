@@ -2,9 +2,9 @@
 
 import torch as th
 # To use syft with cuda.
-th.set_default_tensor_type(th.cuda.FloatTensor)
+"""th.set_default_tensor_type(th.cuda.FloatTensor)
 import syft as sy 
-hook = sy.TorchHook(th)
+hook = sy.TorchHook(th)"""
 import torch.nn as nn
 
 class SpamRNN(nn.Module):
@@ -90,8 +90,6 @@ class SpamRNN(nn.Module):
             if device_str == 'cpu':
                 self.train_on_gpu = False
                 print("Cannot train on GPU.")
-            
-            
 
 
         if (self.train_on_gpu):
@@ -104,31 +102,30 @@ class SpamRNN(nn.Module):
         return hidden
     
     
-    def init_hidden_encrypted(self, batch_size, workers):
+    def init_hidden_encrypted(self, batch_size, workers, use_gpu ):
         ''' Initializes hidden state '''
         # Create two new tensors with sizes n_layers x batch_size x hidden_dim,
         # initialized to zero, for hidden state and cell state of LSTM
-
-        #print("Slef parameters", next(self.parameters() ))
         weight = next(self.parameters()).data
-        print("WEIGHT", weight.device)
-        #weight = weight.cpu()
+
         #print("WEIGHT", weight.device)
-        
+        #weight = weight.cpu()
+        print("WEIGHT", weight.device)
+        print("WEIGHT", type(weight.device))
 
-        if self.train_on_gpu:
-            device_str = 'cuda' if self.train_on_gpu else  'cpu'
-            device = th.device(device_str)
-            if device_str == 'cpu':
-                self.train_on_gpu = False
-                print("Cannot train on GPU.")
-            
-            
-
-        hidden = (weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().fix_precision().share(*workers),
-                  weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().fix_precision().share(*workers))
         
-    
+        device_str =  'cuda' if use_gpu == True  else  'cpu'
+        device = th.device(device_str)
+        print(device_str)
+
+        if str(weight.device).startswith(device_str):
+            hidden = (weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().fix_precision().share(*workers),
+                      weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().fix_precision().share(*workers))
+        
+        else:
+            hidden = (weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().fix_precision().share(*workers).to(device),
+                      weight.new(self.n_layers, batch_size, self.hidden_dim).zero_().fix_precision().share(*workers).to(device))   
+
        
         return hidden
     
