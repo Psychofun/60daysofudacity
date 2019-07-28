@@ -13,6 +13,7 @@ from torch.utils.data import TensorDataset, DataLoader
 
 import numpy as np
 import os 
+from config import cfg
 
 
 # Load dictionaries 
@@ -31,13 +32,15 @@ word_to_index, index_to_word, matrix,labels = csv_to_matrix(fname=FNAME, min_cou
 
 # Get loaders.
 train_loader, valid_loader, test_loader, tensor_train, tensor_validation, tensor_test = split_dataset(matrix,labels, split_frac = SPLIT_FRAC, batch_size = BATCH_SIZE)
+
+
 # MODEL PARAMETERS
 # Instantiate the model w/ hyperparams
 vocab_size = len(index_to_word) 
-output_size = 1
-embedding_dim = 64 #200
-hidden_dim = 32 #128
-n_layers = 2
+output_size = cfg['output_size']
+embedding_dim = cfg['embedding_dim'] #200
+hidden_dim = cfg['hidden_dim'] #128
+n_layers = cfg['n_layers']
 
 DEVICE = th.device( 'cuda' if th.cuda.is_available()  else 'cpu')
 

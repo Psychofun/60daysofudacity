@@ -210,31 +210,66 @@ if __name__ == "__main__":
     import syft as sy 
     hook = sy.TorchHook(th)   
 
+    from config import cfg
+
     # Encryption 
     num_workers = 3 # Number of workers
     workers  = [sy.VirtualWorker(hook, id = "w" + str(i)).add_worker(sy.local_worker) for i in range(num_workers) ]
 
 
-    model_path = "./models/"
-    file_path = model_path + "rnn"
+    model_path = cfg["model_path"]
+    file_path = cfg["file_path"]
     
     vocab_size = len(index_to_word) 
     print("Len of vocabulary", len(index_to_word.keys()))
-    output_size = 1
-    embedding_dim = 64 #200
-    hidden_dim = 32 #128
-    n_layers = 2
+    output_size = cfg["output_size"]
+    embedding_dim = cfg["embedding_dim"] #200
+    hidden_dim = cfg["hidden_dim"] #128
+    n_layers = cfg["n_layers"]
     # Load Model
     # Model class must be defined somewhere
-    model = SpamRNN(vocab_size, output_size, embedding_dim, hidden_dim, n_layers, train_on_gpu = False, workers = workers)
+    model = SpamRNN(vocab_size, output_size, embedding_dim, hidden_dim, n_layers, train_on_gpu = False)
     model.load_state_dict(th.load(file_path))
     model.eval()
+
+
+
+    ### TESTING EMBEDDING LAYER WITH ENCRYPTION
+
+
+
+
+
+    # PREDICTION
 
     message = "Purchase now! Limited offer. Click here. Best deal, never returns alert"
 
     #c = predict(net = model , message = message , use_gpu =True , sequence_length = 200)
     #print("Class predicted", c)
 
-    c_encrypted = predict_encrypted(net = model , message = message , workers = workers , use_gpu = True, sequence_length = 200  )
+    #c_encrypted = predict_encrypted(net = model , message = message , workers = workers , use_gpu = True, sequence_length = 200  )
 
-    print("Spam or Not?: {}".format( "Yes" if c == 1.0 else "No" ))
+    #print("Spam or Not?: {}".format( "Yes" if c == 1.0 else "No" ))
+
+    #print("Spam or Not?: {}".format( "Yes" if c_encrypted == 1.0 else "No" ))
+    
+    
+    ### Test Embedding Layer
+    from torch import nn 
+    embedding = nn.Embedding(10, 3)
+
+    input = th.LongTensor([[1,2,4,5],[4,3,2,9]]).cuda()
+    output = embedding(input)
+
+    print(output)
+
+
+
+    # Encrypt 
+
+    embedding = embedding.fix_precision().share(*workers)
+    input = input.fix_precision().share(*workers)
+
+    output = embedding(input)
+
+    print(output)

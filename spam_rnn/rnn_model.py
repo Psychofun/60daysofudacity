@@ -12,7 +12,7 @@ class SpamRNN(nn.Module):
     The RNN model that will be used to perform Spam Detection.
     """
 
-    def __init__(self, vocab_size, output_size, embedding_dim, hidden_dim, n_layers,train_on_gpu,workers,  drop_prob=0.5):
+    def __init__(self, vocab_size, output_size, embedding_dim, hidden_dim, n_layers,train_on_gpu,drop_prob=0.5):
         """
         Initialize the model by setting up the layers.
         """
@@ -23,7 +23,7 @@ class SpamRNN(nn.Module):
         self.hidden_dim = hidden_dim
         self.train_on_gpu = train_on_gpu
         self.crypto_testing = True
-        self.workers = workers
+        #self.workers = workers
         
         # embedding and LSTM layers
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
@@ -107,13 +107,7 @@ class SpamRNN(nn.Module):
         # Create two new tensors with sizes n_layers x batch_size x hidden_dim,
         # initialized to zero, for hidden state and cell state of LSTM
         weight = next(self.parameters()).data
-
-        #print("WEIGHT", weight.device)
-        #weight = weight.cpu()
-        print("WEIGHT", weight.device)
-        print("WEIGHT", type(weight.device))
-
-        
+  
         device_str =  'cuda' if use_gpu == True  else  'cpu'
         device = th.device(device_str)
         print(device_str)
@@ -129,6 +123,9 @@ class SpamRNN(nn.Module):
        
         return hidden
     
-
+if __name__ == "__main__":
+    pass
+   
+   
     
-        
+   
