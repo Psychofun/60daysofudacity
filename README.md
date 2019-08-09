@@ -20,3 +20,5 @@ Challengue started at 28/06/2019.
 [*Day 41*](https://github.com/Psychofun/fortnite_dances_real_life/commit/b54ce1435dff08da8458dc7a0413e7c07e06d4eb)
 
 [*Day 42*](https://github.com/Psychofun/fortnite_dances_real_life/commit/77cfb06240b3737b522001eb4124e20a858d7839)
+
+[*Day 43*](https://github.com/Psychofun/fortnite_dances_real_life/commit/fd484674b6f3b9a98b006408687464c8d5b6edf9)
