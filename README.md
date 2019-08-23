@@ -48,3 +48,5 @@ Challengue started at 28/06/2019.
 [*Day 55*](https://github.com/Psychofun/flaffylter/commit/b33f7235911372ffaa8c7d42d2c2940f69910ab2)
 
 [*Day 56*](https://github.com/Psychofun/flaffylter/commit/54371cfb077b82bbac337d9dc578e88e515b0a80)
+
+[*Day 57*](https://github.com/Psychofun/flaffylter/commit/bf129c8b1516a6c622e833906a939a172ded5559)
