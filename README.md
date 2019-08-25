@@ -55,3 +55,6 @@ Challengue started at 28/06/2019.
 [*Day 58*]()
 ### Error while hooking torch.
 ![*Error*](./media/error.png)
+
+[*Day 59*](https://github.com/Psychofun/flaffylter/commit/578a0e7e2ea8f2f38b1c80627875740e53d72890)
+
